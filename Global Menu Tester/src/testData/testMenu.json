@@ -28,6 +28,13 @@
           "label":"Save to Cloud (PRO Feature)",
           "cmdName":"cmd_cloud_save_project",
           "disabled":"true"
+        },
+        {
+          "isSeparator":true
+        },        {
+          "label":"About MyApp 123...",
+          "cmdName":"cmd_about_app",
+          "isHomeItem": true
         }
       ]
     },

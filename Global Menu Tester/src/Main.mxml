@@ -23,8 +23,7 @@
             _globalMenu = new GlobalMenu(
                     _testMenu,
                     NativeApplication.nativeApplication,
-                    null,
-                    true
+                    "MyApp 123"
             );
             _globalMenu.addEventListener(GlobalMenuEvent.ITEM_SELECT, _onGlobalCommand);
         }
@@ -32,6 +31,7 @@
         private function _onAppComplete(event:FlexEvent):void {
             trace('Application is now fully initialized');
             _globalMenu.registerMainWindow(this.nativeWindow);
+            _globalMenu.attach();
         }
 
         private function _onGlobalCommand (event : GlobalMenuEvent) : void {
