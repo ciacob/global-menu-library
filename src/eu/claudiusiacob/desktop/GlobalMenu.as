@@ -8,8 +8,26 @@ import flash.events.EventDispatcher;
 import flash.events.IEventDispatcher;
 import flash.ui.Keyboard;
 
+/**
+ * The GlobalMenu class manages the creation and attachment of a native menu for Adobe AIR applications,
+ * with specific adaptations for macOS and Windows platforms. It supports dynamic menu creation based on a JSON structure,
+ * handling of keyboard shortcuts, and dispatching events on menu item selection.
+ *
+ * @param jsonStructure JSON string defining the menu structure.
+ * @param application Reference to the NativeApplication.
+ * @param applicationName Optional name of the application, used for the macOS app menu.
+ */
 public class GlobalMenu implements IEventDispatcher {
 
+    /**
+     * The GlobalMenu class manages the creation and attachment of a native menu for Adobe AIR applications,
+     * with specific adaptations for macOS and Windows platforms. It supports dynamic menu creation based on a JSON structure,
+     * handling of keyboard shortcuts, and dispatching events on menu item selection.
+     *
+     * @param jsonStructure JSON string defining the menu structure.
+     * @param application Reference to the NativeApplication.
+     * @param applicationName Optional name of the application, used for the macOS app menu.
+     */
     public function GlobalMenu(
             jsonStructure:String,
             application:NativeApplication,
@@ -30,28 +48,48 @@ public class GlobalMenu implements IEventDispatcher {
     private var _mainWindow:NativeWindow;
     private var _menu:NativeMenu;
     private var _os:String;
+    private var _actionableItems:Object = {};
 
-    // Implement IEventDispatcher interface methods by delegating to the dispatcher instance
+    /*
+    @see EventDispatcher#dispatchEvent
+     */
     public function dispatchEvent(event:Event):Boolean {
         return _dispatcher.dispatchEvent(event);
     }
 
+    /*
+    @see EventDispatcher#addEventListener
+     */
     public function addEventListener(type:String, listener:Function, useCapture:Boolean = false, priority:int = 0, useWeakReference:Boolean = false):void {
         _dispatcher.addEventListener(type, listener, useCapture, priority, useWeakReference);
     }
 
+    /*
+    @see EventDispatcher#hasEventListener
+     */
     public function hasEventListener(type:String):Boolean {
         return _dispatcher.hasEventListener(type);
     }
 
+    /*
+    @see EventDispatcher#removeEventListener
+     */
     public function removeEventListener(type:String, listener:Function, useCapture:Boolean = false):void {
         _dispatcher.removeEventListener(type, listener, useCapture);
     }
 
+    /*
+    @see EventDispatcher#willTrigger
+     */
     public function willTrigger(type:String):Boolean {
         return _dispatcher.willTrigger(type);
     }
 
+    /**
+     * Registers the main application window to which the menu will be attached on Windows platforms.
+     *
+     * @param window The main application window.
+     */
     public function registerMainWindow(window:NativeWindow):void {
         if (_mainWindow != null) {
             return;
@@ -59,6 +97,10 @@ public class GlobalMenu implements IEventDispatcher {
         _mainWindow = window;
     }
 
+    /**
+     * Attaches the constructed menu to the application or window, based on the operating system.
+     * For macOS, attaches to the application menu; for Windows, attaches to the registered main window.
+     */
     public function attach():void {
         switch (_os) {
             case 'mac':
@@ -77,19 +119,73 @@ public class GlobalMenu implements IEventDispatcher {
         }
     }
 
+    /**
+     * Sets the enablement state of a menu item identified by its command name.
+     * This allows for dynamic enablement or disablement of menu items at runtime.
+     *
+     * @param cmdName The command name of the menu item whose enablement state is to be set.
+     * @param state The enablement state to set for the menu item (true for enabled, false for disabled).
+     */
+    public function setItemEnablement(cmdName:String, state:Boolean):void {
+        if (_actionableItems.hasOwnProperty(cmdName)) {
+            var menuItem:NativeMenuItem = _actionableItems[cmdName];
+
+            trace ('menuItem is:', menuItem , ' | state: ', state);
+
+            menuItem.enabled = state;
+        }
+    }
+
+    /**
+     * Sets the label of a menu item identified by its command name. The label is cloaked to prevent
+     * automatic modifications by the operating system, particularly on macOS. This allows for dynamic
+     * updates to menu item labels at runtime.
+     *
+     * @param cmdName The command name of the menu item whose label is to be updated.
+     * @param label The new label for the menu item, which will be cloaked before being set.
+     */
+    public function setItemLabel(cmdName:String, label:String):void {
+        if (_actionableItems.hasOwnProperty(cmdName)) {
+            var menuItem:NativeMenuItem = _actionableItems[cmdName];
+
+            trace ('menuItem is:', menuItem , ' | state: ', label);
+
+            menuItem.label = _cloakLabel(label);
+        }
+    }
+
+    /**
+     * Identifies the operating system and returns a string indicating the OS ('mac', 'win', or 'other').
+     *
+     * @return A string representing the operating system.
+     */
     private function _getOs():String {
         return NativeApplication.supportsMenu ? 'mac' :
                 NativeWindow.supportsMenu ? 'win' : 'other';
     }
 
+    /**
+     * Attaches the menu to the application for macOS. This method is called internally when attach() is invoked on macOS.
+     */
     private function _attachMacMenu():void {
         _application.menu = _menu;
     }
 
+    /**
+     * Attaches the menu to the main window for Windows. This method is called internally when attach() is invoked on Windows,
+     * and a main window has been registered.
+     */
     private function _attachWinMenu():void {
         _mainWindow.menu = _menu;
     }
 
+    /**
+     * Parses the JSON string representing the menu structure, converting it to a NativeMenu object. This method also adapts
+     * the menu for macOS by calling _convertToMacFormat if necessary.
+     *
+     * @param json The JSON string defining the menu structure.
+     * @return The constructed NativeMenu object.
+     */
      private function _parseMenuJson(json:String):NativeMenu {
         var rawMenuData:Object = JSON.parse(json);
         if (_os == 'mac') {
@@ -98,6 +194,12 @@ public class GlobalMenu implements IEventDispatcher {
         return _buildNativeMenu(rawMenuData.menu as Array);
     }
 
+    /**
+     * Analyzes the keyboard shortcut definition from the menu structure, accommodating both OS-agnostic and OS-specific formats.
+     *
+     * @param rawShortcutSrc The source object for the keyboard shortcut, which can be an Array or an Object.
+     * @return An Object containing the parsed keyEquivalent and keyEquivalentModifiers.
+     */
     private function _getShortcutDefinition(rawShortcutSrc:Object):Object {
         var shortcutElements:Array;
         if (rawShortcutSrc is Array) {
@@ -114,6 +216,13 @@ public class GlobalMenu implements IEventDispatcher {
         return null;
     }
 
+    /**
+     * Processes an array of shortcut elements to construct a keyboard shortcut definition, including the key equivalent and
+     * any modifier keys.
+     *
+     * @param shortcutElements An array containing the key equivalent and modifier keys.
+     * @return An Object containing the keyEquivalent and keyEquivalentModifiers for the shortcut.
+     */
     private function _parseShortcutDefinition(shortcutElements:Array):Object {
         var result:Object = {
             keyEquivalent: "",
@@ -143,6 +252,13 @@ public class GlobalMenu implements IEventDispatcher {
         return result;
     }
 
+    /**
+     * Recursively builds a NativeMenu from a structured Array representing the menu items. This method handles the creation
+     * of menu items, including separators, submenus, and the assignment of keyboard shortcuts and event listeners.
+     *
+     * @param menuStructure An Array of Objects representing the menu and its items.
+     * @return The constructed NativeMenu.
+     */
     private function _buildNativeMenu(menuStructure:Array):NativeMenu {
         var menu:NativeMenu = new NativeMenu();
         for each (var itemData:Object in menuStructure) {
@@ -153,6 +269,7 @@ public class GlobalMenu implements IEventDispatcher {
                 menuItem = new NativeMenuItem(_cloakLabel(itemData.label));
                 if (itemData.hasOwnProperty("cmdName")) {
                     menuItem.name = itemData.cmdName;
+                    _actionableItems[itemData.cmdName] = menuItem;
                     menuItem.addEventListener(Event.SELECT, _onItemSelected);
                 }
                 if (itemData.hasOwnProperty("disabled")) {
@@ -177,11 +294,22 @@ public class GlobalMenu implements IEventDispatcher {
         return menu;
     }
 
+    /**
+     * Handles the selection of a menu item by dispatching a GlobalMenuEvent with the cmdName of the selected item.
+     *
+     * @param event The event object associated with the menu item selection.
+     */
     private function _onItemSelected(event:Event):void {
         var menuItem:NativeMenuItem = NativeMenuItem(event.currentTarget);
         dispatchEvent(new GlobalMenuEvent(GlobalMenuEvent.ITEM_SELECT, menuItem.name));
     }
 
+    /**
+     * Modifies a menu label to include a zero-width space, used to prevent automatic menu item additions by macOS.
+     *
+     * @param label The original menu item label.
+     * @return The modified label with a zero-width space inserted.
+     */
     private function _cloakLabel(label:String):String {
         if (label.length > 0) {
             return label.charAt(0) + "\u200B" + label.slice(1);
@@ -189,6 +317,12 @@ public class GlobalMenu implements IEventDispatcher {
         return label;
     }
 
+    /**
+     * Adapts the menu structure for macOS by creating a "Home" menu with the application name and moving items marked with `isHomeItem`.
+     *
+     * @param menuStructure The original menu structure object.
+     * @return The adapted menu structure for macOS.
+     */
     private function _convertToMacFormat(menuStructure:Object):Object {
         if (!_applicationName) {
             return menuStructure;
@@ -206,6 +340,12 @@ public class GlobalMenu implements IEventDispatcher {
         return menuStructure;
     }
 
+    /**
+     * Recursively searches through the menu structure to find and move items marked as `isHomeItem` to the "Home" menu.
+     *
+     * @param menuArray The array of menu items to search through.
+     * @param homeItems The array to which items marked as `isHomeItem` should be moved.
+     */
     private function _fetchHomeItems(menuArray:Array, homeItems:Array):void {
         for (var i:int = menuArray.length - 1; i >= 0; i--) {
             var item:Object = menuArray[i];
