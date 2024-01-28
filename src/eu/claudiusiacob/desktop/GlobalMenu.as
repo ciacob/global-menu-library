@@ -120,8 +120,8 @@ public class GlobalMenu implements IEventDispatcher {
     }
 
     /**
-     * Sets the enablement state of a menu item identified by its command name.
-     * This allows for dynamic enablement or disablement of menu items at runtime.
+     * Sets the enablement state of a menu item identified by its command name. Note: This method may not apply changes
+     * while any submenu is displayed. Ensure all submenus are closed before calling.
      *
      * @param cmdName The command name of the menu item whose enablement state is to be set.
      * @param state The enablement state to set for the menu item (true for enabled, false for disabled).
@@ -129,27 +129,20 @@ public class GlobalMenu implements IEventDispatcher {
     public function setItemEnablement(cmdName:String, state:Boolean):void {
         if (_actionableItems.hasOwnProperty(cmdName)) {
             var menuItem:NativeMenuItem = _actionableItems[cmdName];
-
-            trace ('menuItem is:', menuItem , ' | state: ', state);
-
             menuItem.enabled = state;
         }
     }
 
     /**
-     * Sets the label of a menu item identified by its command name. The label is cloaked to prevent
-     * automatic modifications by the operating system, particularly on macOS. This allows for dynamic
-     * updates to menu item labels at runtime.
+     * Sets the label of a menu item identified by its command name. Note: This method may not apply changes
+     * while any submenu is displayed. Ensure all submenus are closed before calling.
      *
      * @param cmdName The command name of the menu item whose label is to be updated.
-     * @param label The new label for the menu item, which will be cloaked before being set.
+     * @param label The new label for the menu item.
      */
     public function setItemLabel(cmdName:String, label:String):void {
         if (_actionableItems.hasOwnProperty(cmdName)) {
             var menuItem:NativeMenuItem = _actionableItems[cmdName];
-
-            trace ('menuItem is:', menuItem , ' | state: ', label);
-
             menuItem.label = _cloakLabel(label);
         }
     }
