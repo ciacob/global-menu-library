@@ -25,3 +25,4 @@ bin-release/
 /dataSources/
 /dataSources.local.xml
 Global Menu Tester/Global Menu Tester.iml
+.DS_Store
