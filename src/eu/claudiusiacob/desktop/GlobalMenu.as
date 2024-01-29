@@ -1,6 +1,5 @@
 package eu.claudiusiacob.desktop {
 import flash.desktop.NativeApplication;
-import flash.display.NativeMenu;
 import flash.display.NativeMenuItem;
 import flash.display.NativeWindow;
 import flash.events.Event;
@@ -19,6 +18,9 @@ import flash.ui.Keyboard;
  */
 public class GlobalMenu implements IEventDispatcher {
 
+    private static const ENABLEMENT_CHANGE:String = 'ENABLEMENT_CHANGE';
+    private static const LABEL_CHANGE:String = 'LABEL_CHANGE';
+
     /**
      * The GlobalMenu class manages the creation and attachment of a native menu for Adobe AIR applications,
      * with specific adaptations for macOS and Windows platforms. It supports dynamic menu creation based on a JSON structure,
@@ -31,7 +33,7 @@ public class GlobalMenu implements IEventDispatcher {
     public function GlobalMenu(
             jsonStructure:String,
             application:NativeApplication,
-            applicationName : String = null
+            applicationName:String = null
     ) {
         _dispatcher = new EventDispatcher(this);
         _jsonStructure = jsonStructure;
@@ -46,16 +48,12 @@ public class GlobalMenu implements IEventDispatcher {
     private var _application:NativeApplication;
     private var _applicationName:String;
     private var _mainWindow:NativeWindow;
-    private var _menu:NativeMenu;
+    private var _menu:CustomNativeMenu;
     private var _os:String;
     private var _actionableItems:Object = {};
-
-    /*
-    @see EventDispatcher#dispatchEvent
-     */
-    public function dispatchEvent(event:Event):Boolean {
-        return _dispatcher.dispatchEvent(event);
-    }
+    private var _menusByIndex:Object = {};
+    private var _menusCounter:int = 0;
+    private var _scheduledChanges:Object = {};
 
     /*
     @see EventDispatcher#addEventListener
@@ -128,8 +126,7 @@ public class GlobalMenu implements IEventDispatcher {
      */
     public function setItemEnablement(cmdName:String, state:Boolean):void {
         if (_actionableItems.hasOwnProperty(cmdName)) {
-            var menuItem:NativeMenuItem = _actionableItems[cmdName];
-            menuItem.enabled = state;
+            _scheduleItemChange(cmdName, ENABLEMENT_CHANGE, [state]);
         }
     }
 
@@ -142,8 +139,7 @@ public class GlobalMenu implements IEventDispatcher {
      */
     public function setItemLabel(cmdName:String, label:String):void {
         if (_actionableItems.hasOwnProperty(cmdName)) {
-            var menuItem:NativeMenuItem = _actionableItems[cmdName];
-            menuItem.label = _cloakLabel(label);
+            _scheduleItemChange(cmdName, LABEL_CHANGE, [label]);
         }
     }
 
@@ -173,13 +169,35 @@ public class GlobalMenu implements IEventDispatcher {
     }
 
     /**
-     * Parses the JSON string representing the menu structure, converting it to a NativeMenu object. This method also adapts
+     * Schedule a change for an item in the menu.
+     *
+     * @param {String} itemCmdName - The command name of the item to be changed.
+     * @param {String} changeType - The type of change to be made.
+     * @param {Array} changeArgs - The arguments for the change.
+     *
+     * @return {void}
+     */
+    private function _scheduleItemChange(itemCmdName:String, changeType:String, changeArgs:Array):void {
+        if (_actionableItems.hasOwnProperty(itemCmdName)) {
+            var menuItem:NativeMenuItem = _actionableItems[itemCmdName];
+            var menu:CustomNativeMenu = (menuItem.menu as CustomNativeMenu);
+            var menuId:int = menu.uid;
+            if (!(menuId in _scheduledChanges)) {
+                _scheduledChanges[menuId] = {};
+                menu.addEventListener(Event.DISPLAYING, _onMenuAboutToShow);
+            }
+            _scheduledChanges[menuId][itemCmdName] = {"changeType": changeType, "changeArgs": changeArgs};
+        }
+    }
+
+    /**
+     * Parses the JSON string representing the menu structure, converting it to a CustomNativeMenu object. This method also adapts
      * the menu for macOS by calling _convertToMacFormat if necessary.
      *
      * @param json The JSON string defining the menu structure.
-     * @return The constructed NativeMenu object.
+     * @return The constructed CustomNativeMenu object.
      */
-     private function _parseMenuJson(json:String):NativeMenu {
+    private function _parseMenuJson(json:String):CustomNativeMenu {
         var rawMenuData:Object = JSON.parse(json);
         if (_os == 'mac') {
             rawMenuData = _convertToMacFormat(rawMenuData);
@@ -229,11 +247,7 @@ public class GlobalMenu implements IEventDispatcher {
                         result.keyEquivalentModifiers.push(Keyboard.CONTROL);
                         break;
                     case "cmd":
-                    case "command":
                         result.keyEquivalentModifiers.push(Keyboard.COMMAND);
-                        break;
-                    case "shift":
-                        result.keyEquivalentModifiers.push(Keyboard.SHIFT);
                         break;
                     case "alt":
                         result.keyEquivalentModifiers.push(Keyboard.ALTERNATE);
@@ -246,14 +260,15 @@ public class GlobalMenu implements IEventDispatcher {
     }
 
     /**
-     * Recursively builds a NativeMenu from a structured Array representing the menu items. This method handles the creation
+     * Recursively builds a CustomNativeMenu from a structured Array representing the menu items. This method handles the creation
      * of menu items, including separators, submenus, and the assignment of keyboard shortcuts and event listeners.
      *
      * @param menuStructure An Array of Objects representing the menu and its items.
-     * @return The constructed NativeMenu.
+     * @return The constructed CustomNativeMenu.
      */
-    private function _buildNativeMenu(menuStructure:Array):NativeMenu {
-        var menu:NativeMenu = new NativeMenu();
+    private function _buildNativeMenu(menuStructure:Array):CustomNativeMenu {
+        var menu:CustomNativeMenu = new CustomNativeMenu();
+        _registerMenu(menu);
         for each (var itemData:Object in menuStructure) {
             var menuItem:NativeMenuItem;
             if (itemData.isSeparator) {
@@ -288,13 +303,15 @@ public class GlobalMenu implements IEventDispatcher {
     }
 
     /**
-     * Handles the selection of a menu item by dispatching a GlobalMenuEvent with the cmdName of the selected item.
+     * "Registers" a custom menu, essentially making sure that it will be retrievable
+     * by its unique id, in the future.
      *
-     * @param event The event object associated with the menu item selection.
+     * @param {CustomNativeMenu} menu - The menu object to be registered.
      */
-    private function _onItemSelected(event:Event):void {
-        var menuItem:NativeMenuItem = NativeMenuItem(event.currentTarget);
-        dispatchEvent(new GlobalMenuEvent(GlobalMenuEvent.ITEM_SELECT, menuItem.name));
+    private function _registerMenu(menu:CustomNativeMenu):void {
+        var menuIndex:int = (++_menusCounter);
+        menu.uid = menuIndex;
+        _menusByIndex[menuIndex] = menu;
     }
 
     /**
@@ -322,7 +339,7 @@ public class GlobalMenu implements IEventDispatcher {
         }
 
         // Create the "Home" menu
-        var homeMenu:Object = { "label": _cloakLabel(_applicationName), "children": [] };
+        var homeMenu:Object = {"label": _cloakLabel(_applicationName), "children": []};
 
         // Unshift top-level menus by one
         menuStructure.menu.unshift(homeMenu);
@@ -349,6 +366,55 @@ public class GlobalMenu implements IEventDispatcher {
                 _fetchHomeItems(item.children, homeItems);
             }
         }
+    }
+
+    /*
+    @see EventDispatcher#dispatchEvent
+     */
+    public function dispatchEvent(event:Event):Boolean {
+        return _dispatcher.dispatchEvent(event);
+    }
+
+    /**
+     * Handles the selection of a menu item by dispatching a GlobalMenuEvent with the cmdName of the selected item.
+     *
+     * @param event The event object associated with the menu item selection.
+     */
+    private function _onItemSelected(event:Event):void {
+        var menuItem:NativeMenuItem = NativeMenuItem(event.currentTarget);
+        dispatchEvent(new GlobalMenuEvent(GlobalMenuEvent.ITEM_SELECT, menuItem.name));
+    }
+
+    /**
+     * Handles the `Event.DISPLAYING` event for a native menu.
+     *
+     * Applies scheduled modifications such as label changing and enablement state adjustments to menu items, as
+     * stored in the `_scheduledChanges` registry. These changes take effect immediately before the parent menu is
+     * displayed. After applying the changes, clears up scheduling, and detaches the handler to safeguard against
+     * potential, future memory leaks.
+     *
+     * @param event The event object containing reference to the menu about to be displayed.
+     */
+    private function _onMenuAboutToShow(event:Event):void {
+        var menu:CustomNativeMenu = (event.target as CustomNativeMenu);
+        var menuChanges:Object = (_scheduledChanges[menu.uid] as Object);
+        for (var cmdName:String in menuChanges) {
+            var changeDetails:Object = (menuChanges[cmdName] as Object);
+            var changeType:String = changeDetails.changeType;
+            var changeArgs:Array = changeDetails.changeArgs;
+            var targetMenuItem:NativeMenuItem = (_actionableItems[cmdName] as NativeMenuItem);
+            switch (changeType) {
+                case ENABLEMENT_CHANGE:
+                    targetMenuItem.enabled = (changeArgs[0] as Boolean);
+                    break;
+                case LABEL_CHANGE:
+                    targetMenuItem.label = _cloakLabel(changeArgs[0] as String);
+                    break;
+            }
+        }
+        _scheduledChanges[menu.uid] = null;
+        delete (_scheduledChanges[menu.uid]);
+        menu.removeEventListener(Event.DISPLAYING, _onMenuAboutToShow);
     }
 }
 }
