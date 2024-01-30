@@ -26,28 +26,40 @@ public class GlobalMenu implements IEventDispatcher {
      * with specific adaptations for macOS and Windows platforms. It supports dynamic menu creation based on a JSON structure,
      * handling of keyboard shortcuts, and dispatching events on menu item selection.
      *
-     * @param jsonStructure JSON string defining the menu structure.
+     * @param structure Object or valid JSON string defining the menu structure.
      * @param application Reference to the NativeApplication.
      * @param applicationName Optional name of the application, used for the macOS app menu.
      */
     public function GlobalMenu(
-            jsonStructure:String,
+            structure:Object,
             application:NativeApplication,
             applicationName:String = null
     ) {
         _dispatcher = new EventDispatcher(this);
-        _jsonStructure = jsonStructure;
         _application = application;
         _applicationName = applicationName;
         _os = _getOs();
-        _menu = _parseMenuJson(this._jsonStructure);
+
+        // Determine the type of `structure` sent it, and handle accordingly.
+        if (structure is String) {
+            try {
+                _rawMenuData = (JSON.parse(structure as String)).menu;
+            } catch(e:Error) {
+                throw new ArgumentError('GlobalMenu: failed to parse given `structure` argument as JSON.\n' + e);
+            }
+        } else if (structure is Object) {
+            _rawMenuData = structure;
+        } else {
+            throw new ArgumentError('GlobalMenu: given `structure` argument must be a JSON String or an Object; ' + (typeof structure) + ' given.');
+        }
+        _menu = _makeMenu(_rawMenuData);
     }
 
     private var _dispatcher:EventDispatcher;
-    private var _jsonStructure:String;
     private var _application:NativeApplication;
     private var _applicationName:String;
     private var _mainWindow:NativeWindow;
+    private var _rawMenuData : Object;
     private var _menu:CustomNativeMenu;
     private var _os:String;
     private var _actionableItems:Object = {};
@@ -191,18 +203,17 @@ public class GlobalMenu implements IEventDispatcher {
     }
 
     /**
-     * Parses the JSON string representing the menu structure, converting it to a CustomNativeMenu object. This method also adapts
+     * Converts given `rawMenuData` to a CustomNativeMenu object. This method also adapts
      * the menu for macOS by calling _convertToMacFormat if necessary.
      *
-     * @param json The JSON string defining the menu structure.
+     * @param rawMenuData The Object defining the menu structure.
      * @return The constructed CustomNativeMenu object.
      */
-    private function _parseMenuJson(json:String):CustomNativeMenu {
-        var rawMenuData:Object = JSON.parse(json);
+    private function _makeMenu(rawMenuData:Object):CustomNativeMenu {
         if (_os == 'mac') {
             rawMenuData = _convertToMacFormat(rawMenuData);
         }
-        return _buildNativeMenu(rawMenuData.menu as Array);
+        return _buildNativeMenu(rawMenuData as Array);
     }
 
     /**

@@ -3,7 +3,7 @@
 The Global Menu Library is a versatile utility designed to streamline the creation and management of menus within Adobe AIR applications, offering a unified approach for both macOS (NativeApplication menus) and Windows (NativeWindow menus). This library abstracts the platform-specific differences, allowing developers to define menus in a consistent format across operating systems.
 
 ## Features
-* __Unified Menu Definition__: Define menus using a JSON structure that is consistent across macOS and Windows.
+* __Unified Menu Definition__: Define menus using a JSON/Object structure that is consistent across macOS and Windows.
 * __Dynamic Menu Updates__: Easily enable/disable menu items and update labels on the fly, enhancing interactivity.
 * __Event Handling__: Dispatch custom events upon menu item selection for seamless integration with application logic.
 
@@ -28,7 +28,7 @@ trace("Menu item selected: " + event.cmdName);
 });
 ```
 
-To build the menu in its initial form, you must provide a JSON string that resembles to the following:
+To build the menu in its initial form, you must provide a JSON String (or equivalent Object) that resembles to the following:
 
 ```json
 {
@@ -114,7 +114,7 @@ Mind a couple of things:
 > * You can leave out the __modifier1 ... modifierN__ part altogether, e.g.: `"kbShortcuts" : [ "o" ]` sets the key __O__ by itself as the keyboard shortcut a menu item will use.
 
 ## Public API Overview
-* __GlobalMenu(jsonStructure, application, applicationName)__: Constructor to initialize the menu.
+* __GlobalMenu(structure, application, applicationName)__: Constructor to initialize the menu.
 * __registerMainWindow(window)__: Registers the main application window, essential for menu attachment on Windows.
 * __attach()__: Attaches the menu to the application (macOS) or the main window (Windows).
 * __setItemEnablement(cmdName, state)__: Dynamically sets the enablement state of a menu item.
