@@ -48,7 +48,7 @@ public class GlobalMenu implements IEventDispatcher {
                 throw new ArgumentError('GlobalMenu: failed to parse given `structure` argument as JSON.\n' + e);
             }
         } else if (structure is Object) {
-            _rawMenuData = structure;
+            _rawMenuData = structure.menu;
         } else {
             throw new ArgumentError('GlobalMenu: given `structure` argument must be a JSON String or an Object; ' + (typeof structure) + ' given.');
         }
@@ -66,6 +66,7 @@ public class GlobalMenu implements IEventDispatcher {
     private var _menusByIndex:Object = {};
     private var _menusCounter:int = 0;
     private var _scheduledChanges:Object = {};
+    private var _menuItemsById:Object = {};
 
     /*
     @see EventDispatcher#addEventListener
@@ -153,6 +154,29 @@ public class GlobalMenu implements IEventDispatcher {
         if (_actionableItems.hasOwnProperty(cmdName)) {
             _scheduleItemChange(cmdName, LABEL_CHANGE, [label]);
         }
+    }
+
+    /**
+     * Sets the checked state of a menu item identified by its id. This method allows dynamic updates to the menu item's state, reflecting changes in the application's state or user's choices.
+     *
+     * @param id The unique identifier for the menu item whose checked state is to be updated.
+     * @param checked The new checked state for the menu item (true for checked, false for unchecked).
+     */
+    public function setItemChecked(id:String, checked:Boolean):void {
+        var menuItem:NativeMenuItem = _getMenuItemById(id);
+        if (menuItem) {
+            menuItem.checked = checked;
+        }
+    }
+
+    /**
+     * Retrieves a NativeMenuItem instance by its unique identifier. This method supports accessing menu items directly, facilitating operations like updating their properties at runtime.
+     *
+     * @param id The unique identifier of the menu item to retrieve.
+     * @return The NativeMenuItem instance associated with the given id, or null if no such item exists.
+     */
+    private function _getMenuItemById(id:String):NativeMenuItem {
+        return _menuItemsById[id];
     }
 
     /**
@@ -303,6 +327,9 @@ public class GlobalMenu implements IEventDispatcher {
                         menuItem.keyEquivalent = shortcutObj.keyEquivalent;
                         menuItem.keyEquivalentModifiers = shortcutObj.keyEquivalentModifiers;
                     }
+                }
+                if (itemData.hasOwnProperty("id")) {
+                    _menuItemsById[itemData.id] = menuItem;
                 }
                 if (itemData.hasOwnProperty("children")) {
                     menuItem.submenu = _buildNativeMenu(itemData.children);
