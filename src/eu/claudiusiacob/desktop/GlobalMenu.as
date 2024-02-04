@@ -20,6 +20,8 @@ public class GlobalMenu implements IEventDispatcher {
 
     private static const ENABLEMENT_CHANGE:String = 'ENABLEMENT_CHANGE';
     private static const LABEL_CHANGE:String = 'LABEL_CHANGE';
+    private static const CHECKED_CHANGE:String = 'CHECKED_CHANGE';
+    private static const INTERNAL_SEPARATOR : String = 'ǁ';
 
     /**
      * The GlobalMenu class manages the creation and attachment of a native menu for Adobe AIR applications,
@@ -44,7 +46,7 @@ public class GlobalMenu implements IEventDispatcher {
         if (structure is String) {
             try {
                 _rawMenuData = (JSON.parse(structure as String)).menu;
-            } catch(e:Error) {
+            } catch (e:Error) {
                 throw new ArgumentError('GlobalMenu: failed to parse given `structure` argument as JSON.\n' + e);
             }
         } else if (structure is Object) {
@@ -59,7 +61,7 @@ public class GlobalMenu implements IEventDispatcher {
     private var _application:NativeApplication;
     private var _applicationName:String;
     private var _mainWindow:NativeWindow;
-    private var _rawMenuData : Object;
+    private var _rawMenuData:Object;
     private var _menu:CustomNativeMenu;
     private var _os:String;
     private var _actionableItems:Object = {};
@@ -131,8 +133,7 @@ public class GlobalMenu implements IEventDispatcher {
     }
 
     /**
-     * Sets the enablement state of a menu item identified by its command name. Note: This method may not apply changes
-     * while any submenu is displayed. Ensure all submenus are closed before calling.
+     * Sets the enablement state of a menu item identified by its command name.
      *
      * @param cmdName The command name of the menu item whose enablement state is to be set.
      * @param state The enablement state to set for the menu item (true for enabled, false for disabled).
@@ -144,8 +145,7 @@ public class GlobalMenu implements IEventDispatcher {
     }
 
     /**
-     * Sets the label of a menu item identified by its command name. Note: This method may not apply changes
-     * while any submenu is displayed. Ensure all submenus are closed before calling.
+     * Sets the label of a menu item identified by its command name.
      *
      * @param cmdName The command name of the menu item whose label is to be updated.
      * @param label The new label for the menu item.
@@ -157,15 +157,14 @@ public class GlobalMenu implements IEventDispatcher {
     }
 
     /**
-     * Sets the checked state of a menu item identified by its id. This method allows dynamic updates to the menu item's state, reflecting changes in the application's state or user's choices.
+     * Sets the checked state of a menu item identified by its command name.
      *
-     * @param id The unique identifier for the menu item whose checked state is to be updated.
+     * @param cmdName The command name of the menu item whose checked state is to be updated.
      * @param checked The new checked state for the menu item (true for checked, false for unchecked).
      */
-    public function setItemChecked(id:String, checked:Boolean):void {
-        var menuItem:NativeMenuItem = _getMenuItemById(id);
-        if (menuItem) {
-            menuItem.checked = checked;
+    public function setItemChecked(cmdName:String, checked:Boolean):void {
+        if (_actionableItems.hasOwnProperty(cmdName)) {
+            _scheduleItemChange(cmdName, CHECKED_CHANGE, [checked]);
         }
     }
 
@@ -218,11 +217,13 @@ public class GlobalMenu implements IEventDispatcher {
             var menuItem:NativeMenuItem = _actionableItems[itemCmdName];
             var menu:CustomNativeMenu = (menuItem.menu as CustomNativeMenu);
             var menuId:int = menu.uid;
+
             if (!(menuId in _scheduledChanges)) {
                 _scheduledChanges[menuId] = {};
                 menu.addEventListener(Event.DISPLAYING, _onMenuAboutToShow);
             }
-            _scheduledChanges[menuId][itemCmdName] = {"changeType": changeType, "changeArgs": changeArgs};
+            var changeKey:String = (itemCmdName + INTERNAL_SEPARATOR + changeType);
+            _scheduledChanges[menuId][changeKey] = {"changeType": changeType, "changeArgs": changeArgs};
         }
     }
 
@@ -436,8 +437,9 @@ public class GlobalMenu implements IEventDispatcher {
     private function _onMenuAboutToShow(event:Event):void {
         var menu:CustomNativeMenu = (event.target as CustomNativeMenu);
         var menuChanges:Object = (_scheduledChanges[menu.uid] as Object);
-        for (var cmdName:String in menuChanges) {
-            var changeDetails:Object = (menuChanges[cmdName] as Object);
+        for (var key:String in menuChanges) {
+            var changeDetails:Object = (menuChanges[key] as Object);
+            var cmdName:String = key.split(INTERNAL_SEPARATOR).shift();
             var changeType:String = changeDetails.changeType;
             var changeArgs:Array = changeDetails.changeArgs;
             var targetMenuItem:NativeMenuItem = (_actionableItems[cmdName] as NativeMenuItem);
@@ -447,6 +449,9 @@ public class GlobalMenu implements IEventDispatcher {
                     break;
                 case LABEL_CHANGE:
                     targetMenuItem.label = _cloakLabel(changeArgs[0] as String);
+                    break;
+                case CHECKED_CHANGE:
+                    targetMenuItem.checked = (changeArgs[0] as Boolean);
                     break;
             }
         }
