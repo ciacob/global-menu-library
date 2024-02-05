@@ -119,6 +119,9 @@ Mind a couple of things:
 * __attach()__: Attaches the menu to the application (macOS) or the main window (Windows).
 * __setItemEnablement(cmdName, state)__: Dynamically sets the enablement state of a menu item.
 * __setItemLabel(cmdName, label)__: Updates the label of a menu item.
+* __setItemChecked(cmdName, checked): Adds or removes a checkmark next to a menu item.
+* __block__: removes al interaction, so that using the mouse or keyboard to select a menu item will have no effect. If supported by the OS, also disables all the root-level menu items.
+* __unblock__: reverses the effect of __block__. 
 > Please note that dynamic updates to menu items (setItemEnablement, setItemLabel) may not take effect if a submenu is currently displayed. Ensure submenus are closed before making such updates.
 
 This library aims to simplify menu management in cross-platform AIR applications, providing a clear and efficient way to handle native menus with minimal platform-specific code.

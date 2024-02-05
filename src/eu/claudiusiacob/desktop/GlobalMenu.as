@@ -21,7 +21,7 @@ public class GlobalMenu implements IEventDispatcher {
     private static const ENABLEMENT_CHANGE:String = 'ENABLEMENT_CHANGE';
     private static const LABEL_CHANGE:String = 'LABEL_CHANGE';
     private static const CHECKED_CHANGE:String = 'CHECKED_CHANGE';
-    private static const INTERNAL_SEPARATOR : String = 'ǁ';
+    private static const INTERNAL_SEPARATOR:String = 'ǁ';
 
     /**
      * The GlobalMenu class manages the creation and attachment of a native menu for Adobe AIR applications,
@@ -55,6 +55,9 @@ public class GlobalMenu implements IEventDispatcher {
             throw new ArgumentError('GlobalMenu: given `structure` argument must be a JSON String or an Object; ' + (typeof structure) + ' given.');
         }
         _menu = _makeMenu(_rawMenuData);
+        if (_menu) {
+            _menuAvailable = true;
+        }
     }
 
     private var _dispatcher:EventDispatcher;
@@ -69,6 +72,8 @@ public class GlobalMenu implements IEventDispatcher {
     private var _menusCounter:int = 0;
     private var _scheduledChanges:Object = {};
     private var _menuItemsById:Object = {};
+    private var _rootItems:Array = [];
+    private var _menuAvailable:Boolean;
 
     /*
     @see EventDispatcher#addEventListener
@@ -166,6 +171,29 @@ public class GlobalMenu implements IEventDispatcher {
         if (_actionableItems.hasOwnProperty(cmdName)) {
             _scheduleItemChange(cmdName, CHECKED_CHANGE, [checked]);
         }
+    }
+
+    /**
+     * Disables all root-level menu items, making the entire menu non-interactive. This method is typically
+     * used to prevent user interaction with the menu during certain application states, such as while processing
+     * or loading data.
+     */
+    public function block():void {
+        _menuAvailable = false;
+        for each (var menuItem:NativeMenuItem in _rootItems) {
+            menuItem.enabled = false;
+        }
+    }
+
+    /**
+     * Re-enables all root-level menu items, restoring interactivity to the menu. This method should be called
+     * after a previous call to `block` when the application is ready to allow user interaction with the menu again.
+     */
+    public function unblock():void {
+        for each (var menuItem:NativeMenuItem in _rootItems) {
+            menuItem.enabled = true;
+        }
+        _menuAvailable = true;
     }
 
     /**
@@ -299,10 +327,16 @@ public class GlobalMenu implements IEventDispatcher {
      * Recursively builds a CustomNativeMenu from a structured Array representing the menu items. This method handles the creation
      * of menu items, including separators, submenus, and the assignment of keyboard shortcuts and event listeners.
      *
-     * @param menuStructure An Array of Objects representing the menu and its items.
+     * @param   menuStructure
+     *          An Array of Objects representing the menu and its items.
+     *
+     * @param   parent
+     *          Optional, `null` by default, passed-in by recursive calls. Helps the function identify whether it
+     *          operates at root level or not.
+     *
      * @return The constructed CustomNativeMenu.
      */
-    private function _buildNativeMenu(menuStructure:Array):CustomNativeMenu {
+    private function _buildNativeMenu(menuStructure:Array, parent:Object = null):CustomNativeMenu {
         var menu:CustomNativeMenu = new CustomNativeMenu();
         _registerMenu(menu);
         for each (var itemData:Object in menuStructure) {
@@ -311,6 +345,9 @@ public class GlobalMenu implements IEventDispatcher {
                 menuItem = new NativeMenuItem("", true);
             } else {
                 menuItem = new NativeMenuItem(_cloakLabel(itemData.label));
+                if (!parent) {
+                    _rootItems.push(menuItem);
+                }
                 if (itemData.hasOwnProperty("cmdName")) {
                     menuItem.name = itemData.cmdName;
                     _actionableItems[itemData.cmdName] = menuItem;
@@ -333,7 +370,7 @@ public class GlobalMenu implements IEventDispatcher {
                     _menuItemsById[itemData.id] = menuItem;
                 }
                 if (itemData.hasOwnProperty("children")) {
-                    menuItem.submenu = _buildNativeMenu(itemData.children);
+                    menuItem.submenu = _buildNativeMenu(itemData.children, menuItem);
                 }
             }
             menu.addItem(menuItem);
@@ -420,8 +457,10 @@ public class GlobalMenu implements IEventDispatcher {
      * @param event The event object associated with the menu item selection.
      */
     private function _onItemSelected(event:Event):void {
-        var menuItem:NativeMenuItem = NativeMenuItem(event.currentTarget);
-        dispatchEvent(new GlobalMenuEvent(GlobalMenuEvent.ITEM_SELECT, menuItem.name));
+        if (_menuAvailable) {
+            var menuItem:NativeMenuItem = NativeMenuItem(event.currentTarget);
+            dispatchEvent(new GlobalMenuEvent(GlobalMenuEvent.ITEM_SELECT, menuItem.name));
+        }
     }
 
     /**
