@@ -264,7 +264,7 @@ public class GlobalMenu implements IEventDispatcher {
      */
     private function _makeMenu(rawMenuData:Object):CustomNativeMenu {
         if (_os == 'mac') {
-            rawMenuData = _convertToMacFormat(rawMenuData);
+            rawMenuData = _convertToMacFormat(rawMenuData as Array);
         }
         return _buildNativeMenu(rawMenuData as Array);
     }
@@ -406,10 +406,10 @@ public class GlobalMenu implements IEventDispatcher {
     /**
      * Adapts the menu structure for macOS by creating a "Home" menu with the application name and moving items marked with `isHomeItem`.
      *
-     * @param menuStructure The original menu structure object.
+     * @param menuStructure The original menu structure Array.
      * @return The adapted menu structure for macOS.
      */
-    private function _convertToMacFormat(menuStructure:Object):Object {
+    private function _convertToMacFormat(menuStructure:Array):Object {
         if (!_applicationName) {
             return menuStructure;
         }
@@ -418,11 +418,10 @@ public class GlobalMenu implements IEventDispatcher {
         var homeMenu:Object = {"label": _cloakLabel(_applicationName), "children": []};
 
         // Unshift top-level menus by one
-        menuStructure.menu.unshift(homeMenu);
+        menuStructure.unshift(homeMenu);
 
         // Call recursive function to fetch "isHomeItem" items
-        _fetchHomeItems(menuStructure.menu, homeMenu.children);
-
+        _fetchHomeItems(menuStructure, homeMenu.children);
         return menuStructure;
     }
 
