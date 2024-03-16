@@ -45,7 +45,7 @@ public class GlobalMenu implements IEventDispatcher {
         // Determine the type of `structure` sent it, and handle accordingly.
         if (structure is String) {
             try {
-                _rawMenuData = (JSON.parse(structure as String)).menu;
+                _rawMenuData = (JSON.parse(structure as String) as Object).menu;
             } catch (e:Error) {
                 throw new ArgumentError('GlobalMenu: failed to parse given `structure` argument as JSON.\n' + e);
             }
@@ -197,21 +197,11 @@ public class GlobalMenu implements IEventDispatcher {
     }
 
     /**
-     * Retrieves a NativeMenuItem instance by its unique identifier. This method supports accessing menu items directly, facilitating operations like updating their properties at runtime.
-     *
-     * @param id The unique identifier of the menu item to retrieve.
-     * @return The NativeMenuItem instance associated with the given id, or null if no such item exists.
-     */
-    private function _getMenuItemById(id:String):NativeMenuItem {
-        return _menuItemsById[id];
-    }
-
-    /**
      * Identifies the operating system and returns a string indicating the OS ('mac', 'win', or 'other').
      *
      * @return A string representing the operating system.
      */
-    private function _getOs():String {
+    private static function _getOs():String {
         return NativeApplication.supportsMenu ? 'mac' :
                 NativeWindow.supportsMenu ? 'win' : 'other';
     }
@@ -252,6 +242,10 @@ public class GlobalMenu implements IEventDispatcher {
             }
             var changeKey:String = (itemCmdName + INTERNAL_SEPARATOR + changeType);
             _scheduledChanges[menuId][changeKey] = {"changeType": changeType, "changeArgs": changeArgs};
+
+            // We try to apply the changes immediately. This might not work on all platforms, in which case we have
+            // a second chance of applying them when the menu is about to be displayed.
+            _applyScheduledChanges(menu);
         }
     }
 
@@ -298,7 +292,7 @@ public class GlobalMenu implements IEventDispatcher {
      * @param shortcutElements An array containing the key equivalent and modifier keys.
      * @return An Object containing the keyEquivalent and keyEquivalentModifiers for the shortcut.
      */
-    private function _parseShortcutDefinition(shortcutElements:Array):Object {
+    private static function _parseShortcutDefinition(shortcutElements:Array):Object {
         var result:Object = {
             keyEquivalent: "",
             keyEquivalentModifiers: []
@@ -396,7 +390,7 @@ public class GlobalMenu implements IEventDispatcher {
      * @param label The original menu item label.
      * @return The modified label with a zero-width space inserted.
      */
-    private function _cloakLabel(label:String):String {
+    private static function _cloakLabel(label:String):String {
         if (label.length > 0) {
             return label.charAt(0) + "\u200B" + label.slice(1);
         }
@@ -431,7 +425,7 @@ public class GlobalMenu implements IEventDispatcher {
      * @param menuArray The array of menu items to search through.
      * @param homeItems The array to which items marked as `isHomeItem` should be moved.
      */
-    private function _fetchHomeItems(menuArray:Array, homeItems:Array):void {
+    private static function _fetchHomeItems(menuArray:Array, homeItems:Array):void {
         for (var i:int = menuArray.length - 1; i >= 0; i--) {
             var item:Object = menuArray[i];
             if (item.hasOwnProperty("isHomeItem") && item.isHomeItem) {
@@ -465,15 +459,26 @@ public class GlobalMenu implements IEventDispatcher {
     /**
      * Handles the `Event.DISPLAYING` event for a native menu.
      *
-     * Applies scheduled modifications such as label changing and enablement state adjustments to menu items, as
-     * stored in the `_scheduledChanges` registry. These changes take effect immediately before the parent menu is
-     * displayed. After applying the changes, clears up scheduling, and detaches the handler to safeguard against
-     * potential, future memory leaks.
-     *
      * @param event The event object containing reference to the menu about to be displayed.
      */
     private function _onMenuAboutToShow(event:Event):void {
         var menu:CustomNativeMenu = (event.target as CustomNativeMenu);
+        _applyScheduledChanges(menu, true);
+    }
+
+    /**
+     * Applies scheduled modifications such as label changing and enablement state adjustments to menu items, as
+     * stored in the `_scheduledChanges` registry. These changes take effect immediately before the parent menu is
+     * displayed. After applying the changes, clears up scheduling, and detaches the handler to safeguard against
+     * potential, future memory leaks.
+     * @param   menu
+     *          The menu to apply scheduled changes to.
+     *
+     * @param   removeFromQueue
+     *          Optional, default `false`. Whether to remove a change from the list of scheduled changes once it was
+     *          performed.
+     */
+    private function _applyScheduledChanges(menu:CustomNativeMenu, removeFromQueue:Boolean = false):void {
         var menuChanges:Object = (_scheduledChanges[menu.uid] as Object);
         for (var key:String in menuChanges) {
             var changeDetails:Object = (menuChanges[key] as Object);
@@ -493,9 +498,11 @@ public class GlobalMenu implements IEventDispatcher {
                     break;
             }
         }
-        _scheduledChanges[menu.uid] = null;
-        delete (_scheduledChanges[menu.uid]);
-        menu.removeEventListener(Event.DISPLAYING, _onMenuAboutToShow);
+        if (removeFromQueue) {
+            _scheduledChanges[menu.uid] = null;
+            delete (_scheduledChanges[menu.uid]);
+            menu.removeEventListener(Event.DISPLAYING, _onMenuAboutToShow);
+        }
     }
 }
 }
