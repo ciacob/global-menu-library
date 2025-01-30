@@ -27,3 +27,6 @@ bin-release/
 Global Menu Tester/Global Menu Tester.iml
 .DS_Store
 .DS_Store
+
+/.vscode
+/asconfig.json
