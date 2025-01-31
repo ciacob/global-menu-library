@@ -30,3 +30,6 @@ Global Menu Tester/Global Menu Tester.iml
 
 /.vscode
 /asconfig.json
+
+.vscode/
+asconfig.json
